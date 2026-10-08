@@ -1,13 +1,17 @@
 import logging
 import os
 import pickle
+from io import BytesIO
 from pathlib import Path
 
+import pandas as pd
 import requests
 import streamlit as st
+from sklearn.metrics.pairwise import cosine_similarity
 from spotipy import Spotify
 from spotipy.exceptions import SpotifyException
 from spotipy.oauth2 import SpotifyClientCredentials
+from train_model import prepare_model
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -60,6 +64,12 @@ def get_spotify_client():
     return Spotify(client_credentials_manager=credentials)
 
 
+@st.cache_resource(show_spinner="Preparing your music recommendations...")
+def load_uploaded_dataset(csv_content):
+    music = pd.read_csv(BytesIO(csv_content))
+    return prepare_model(music)
+
+
 @st.cache_data(ttl=86400)
 def get_itunes_album_cover_url(song_name, artist_name):
     try:
@@ -100,17 +110,18 @@ def get_song_album_cover_url(song_name, artist_name, spotify_client):
     return get_itunes_album_cover_url(song_name, artist_name)
 
 
-def recommend(song, music, similarity, spotify_client):
+def recommend(song, music, similarity, spotify_client, song_vectors=None):
     matches = music.index[music["song"] == song]
     if matches.empty:
         return []
 
     song_index = matches[0]
-    ranked_songs = sorted(
-        enumerate(similarity[song_index]),
-        key=lambda item: item[1],
-        reverse=True,
+    scores = (
+        cosine_similarity(song_vectors[song_index], song_vectors).ravel()
+        if song_vectors is not None
+        else similarity[song_index]
     )
+    ranked_songs = sorted(enumerate(scores), key=lambda item: item[1], reverse=True)
     recommendations = []
     for index, _score in ranked_songs:
         if index == song_index:
@@ -136,14 +147,21 @@ st.title("Music Recommender System")
 
 try:
     music, similarity = load_models()
-except FileNotFoundError as error:
-    st.error(str(error))
-    st.code(
-        "Place spotify_millsongdata.csv next to app.py, then run:\n"
-        ".\\.venv\\Scripts\\python.exe train_model.py",
-        language="powershell",
+    song_vectors = None
+except FileNotFoundError:
+    st.info(
+        "This hosted app needs a lyrics CSV to build its recommendation model. "
+        "Upload a CSV with artist, song, and text columns."
     )
-    st.stop()
+    uploaded_csv = st.file_uploader("Upload lyrics dataset (CSV)", type="csv")
+    if uploaded_csv is None:
+        st.stop()
+    try:
+        music, song_vectors = load_uploaded_dataset(uploaded_csv.getvalue())
+        similarity = None
+    except (OSError, ValueError, pd.errors.ParserError) as error:
+        st.error(f"Could not prepare the uploaded dataset: {error}")
+        st.stop()
 except (OSError, pickle.UnpicklingError, ValueError) as error:
     st.error(f"Could not load the recommender model: {error}")
     st.stop()
@@ -156,7 +174,13 @@ selected_song = st.selectbox(
 )
 
 if st.button("Show Recommendations"):
-    recommendations = recommend(selected_song, music, similarity, spotify_client)
+    recommendations = recommend(
+        selected_song,
+        music,
+        similarity,
+        spotify_client,
+        song_vectors=song_vectors,
+    )
     if not recommendations:
         st.warning("No recommendations were found for this song.")
     else:

@@ -21,6 +21,18 @@ def build_model(csv_path):
         )
 
     music = pd.read_csv(csv_path)
+    music, song_vectors = prepare_model(music)
+    similarity = cosine_similarity(song_vectors)
+
+    with (PROJECT_DIR / "df.pkl").open("wb") as file:
+        pickle.dump(music, file)
+    with (PROJECT_DIR / "similarity.pkl").open("wb") as file:
+        pickle.dump(similarity, file)
+
+    return len(music)
+
+
+def prepare_model(music):
     missing_columns = REQUIRED_COLUMNS.difference(music.columns)
     if missing_columns:
         raise ValueError(
@@ -37,14 +49,7 @@ def build_model(csv_path):
     music = music.reset_index(drop=True)
     vectorizer = TfidfVectorizer(analyzer="word", stop_words="english")
     song_vectors = vectorizer.fit_transform(music["text"])
-    similarity = cosine_similarity(song_vectors)
-
-    with (PROJECT_DIR / "df.pkl").open("wb") as file:
-        pickle.dump(music, file)
-    with (PROJECT_DIR / "similarity.pkl").open("wb") as file:
-        pickle.dump(similarity, file)
-
-    return len(music)
+    return music, song_vectors
 
 
 def main():

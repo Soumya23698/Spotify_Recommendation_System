@@ -31,6 +31,19 @@
    The trainer uses up to 5,000 songs and creates `df.pkl` and `similarity.pkl`
    next to `app.py`. Restart Streamlit after training.
 
+## Deploy on Streamlit Community Cloud
+
+The lyrics dataset and generated model files are intentionally not committed to
+GitHub. When the deployed app has no local model, upload a CSV in the app with
+`artist`, `song`, and `text` columns. It builds and caches the recommendation
+vectors for the session; only the selected song's similarity scores are
+calculated, avoiding a large dense model file.
+
+To deploy, sign in at <https://share.streamlit.io>, select **Create app**, choose
+`Soumya23698/Spotify_Recommendation_System`, branch `main`, and file path
+`app.py`, then deploy. On first use, upload a copy of the dataset you are
+permitted to use.
+
 ## VS Code imports
 
 Open this project folder in VS Code. Its workspace settings select the local
