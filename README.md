@@ -28,20 +28,21 @@
    .\.venv\Scripts\python.exe train_model.py --csv "D:\Data\spotify_millsongdata.csv"
    ```
 
-   The trainer uses up to 5,000 songs and creates `df.pkl` and `similarity.pkl`
-   next to `app.py`. Restart Streamlit after training.
+   The trainer uses up to 5,000 songs and creates `df.pkl`, `similarity.pkl`,
+   and the smaller `recommendations.json` catalog next to `app.py`. Restart
+   Streamlit after training.
 
 ## Deploy on Streamlit Community Cloud
 
-The lyrics dataset and generated model files are intentionally not committed to
-GitHub. The app does not provide a dataset upload control. A deployment must
-have `df.pkl` and `similarity.pkl` available next to `app.py` or it will show a
-model-not-configured message.
+The lyrics dataset and large generated model files are intentionally not
+committed to GitHub. The compact `recommendations.json` catalog is committed so
+the hosted app can provide recommendations without a dataset upload or large
+model binaries.
 
 To deploy, sign in at <https://share.streamlit.io>, select **Create app**, choose
 `Soumya23698/Spotify_Recommendation_System`, branch `main`, and file path
-`app.py`, then deploy. Configure the trained model files for the deployment
-before expecting song recommendations.
+`app.py`, then deploy. To regenerate the catalog, run `train_model.py` with the
+dataset and commit the resulting `recommendations.json`.
 
 ## VS Code imports
 

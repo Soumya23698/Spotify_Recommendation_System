@@ -1,6 +1,7 @@
 import logging
+import html
+import json
 import os
-import pickle
 from pathlib import Path
 
 import requests
@@ -14,37 +15,23 @@ PROJECT_DIR = Path(__file__).resolve().parent
 FALLBACK_COVER_URL = "https://i.postimg.cc/0QNxYz4V/social.png"
 
 
-@st.cache_resource
-def load_models():
-    dataframe_path = next(
-        (path for path in (PROJECT_DIR / "df.pkl", PROJECT_DIR / "df") if path.is_file()),
-        None,
-    )
-    similarity_path = next(
-        (
-            path
-            for path in (PROJECT_DIR / "similarity.pkl", PROJECT_DIR / "similarity")
-            if path.is_file()
-        ),
-        None,
-    )
-    if dataframe_path is None or similarity_path is None:
-        raise FileNotFoundError(
-            "The recommender model files are missing. Add "
-            "'spotify_millsongdata.csv' to the project folder and run "
-            "'python train_model.py'."
-        )
-
-    with dataframe_path.open("rb") as file:
-        music = pickle.load(file)
-    with similarity_path.open("rb") as file:
-        similarity = pickle.load(file)
-
-    if not {"song", "artist"}.issubset(music.columns):
-        raise ValueError("df.pkl must contain 'song' and 'artist' columns.")
-    if len(similarity.shape) != 2 or similarity.shape != (len(music), len(music)):
-        raise ValueError("similarity.pkl dimensions do not match df.pkl.")
-    return music, similarity
+@st.cache_data
+def load_recommendations():
+    catalog_path = PROJECT_DIR / "recommendations.json"
+    with catalog_path.open(encoding="utf-8") as file:
+        catalog = json.load(file)
+    songs = catalog.get("songs")
+    if not isinstance(songs, list) or not songs:
+        raise ValueError("recommendations.json must contain a non-empty songs list.")
+    if any(
+        not isinstance(song, dict)
+        or not isinstance(song.get("song"), str)
+        or not isinstance(song.get("artist"), str)
+        or not isinstance(song.get("recommendations"), list)
+        for song in songs
+    ):
+        raise ValueError("recommendations.json contains an invalid song entry.")
+    return songs
 
 
 def get_spotify_client():
@@ -100,70 +87,90 @@ def get_song_album_cover_url(song_name, artist_name, spotify_client):
     return get_itunes_album_cover_url(song_name, artist_name)
 
 
-def recommend(song, music, similarity, spotify_client):
-    matches = music.index[music["song"] == song]
-    if matches.empty:
+def recommend(song, catalog, spotify_client):
+    selected = next((entry for entry in catalog if entry["song"] == song), None)
+    if selected is None:
         return []
 
-    song_index = matches[0]
-    ranked_songs = sorted(
-        enumerate(similarity[song_index]),
-        key=lambda item: item[1],
-        reverse=True,
-    )
     recommendations = []
-    for index, _score in ranked_songs:
-        if index == song_index:
-            continue
-        artist = music.iloc[index]["artist"]
-        title = music.iloc[index]["song"]
+    for entry in selected["recommendations"]:
+        title = entry["song"]
+        artist = entry["artist"]
+        cover_result = get_song_album_cover_url(title, artist, spotify_client)
         recommendations.append(
             {
                 "song": title,
                 "artist": artist,
-                "cover_result": get_song_album_cover_url(
-                    title, artist, spotify_client
-                ),
+                "cover_result": cover_result,
             }
         )
-        if len(recommendations) == 5:
-            break
     return recommendations
 
 
 st.set_page_config(
-    page_title="Spotify Song Recommender",
+    page_title="Music Recommender System",
     page_icon="🎵",
-    layout="wide",
+    layout="centered",
 )
-st.title("Spotify Song Recommender")
+st.markdown(
+    """
+    <style>
+    .block-container {
+        max-width: 680px;
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+    div[data-testid="stButton"] > button {
+        color: #ff4b4b;
+        background: transparent;
+        border: 2px solid #ff4b4b;
+        border-radius: 0.35rem;
+        font-weight: 600;
+    }
+    div[data-testid="stButton"] > button:hover {
+        color: #ffffff;
+        background: #ff4b4b;
+        border-color: #ff4b4b;
+    }
+    .recommendation-title {
+        overflow: hidden;
+        margin-bottom: 0.65rem;
+        font-family: monospace;
+        font-size: 0.84rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    div[data-testid="stImage"] img {
+        aspect-ratio: 1 / 1;
+        object-fit: cover;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+st.title("Music Recommender System")
 
 try:
-    music, similarity = load_models()
+    song_catalog = load_recommendations()
 except FileNotFoundError:
     st.error(
-        "The recommendation model is not configured. Add the model files "
-        "before starting the app."
+        "The recommendation catalog is missing. Run train_model.py and publish "
+        "the generated recommendations.json file."
     )
     st.stop()
-except (OSError, pickle.UnpicklingError, ValueError) as error:
-    st.error(f"Could not load the recommender model: {error}")
+except (OSError, json.JSONDecodeError, ValueError) as error:
+    st.error(f"Could not load the recommendation catalog: {error}")
     st.stop()
 
 spotify_client = get_spotify_client()
 
 selected_song = st.selectbox(
-    "Type or select a song",
-    music["song"].dropna().astype(str).unique(),
+    "Type or select a song from the dropdown",
+    list(dict.fromkeys(entry["song"] for entry in song_catalog)),
 )
 
-if st.button("Show Recommendations"):
-    recommendations = recommend(
-        selected_song,
-        music,
-        similarity,
-        spotify_client,
-    )
+if st.button("Show Recommendation"):
+    recommendations = recommend(selected_song, song_catalog, spotify_client)
     if not recommendations:
         st.warning("No recommendations were found for this song.")
     else:
@@ -186,9 +193,13 @@ if st.button("Show Recommendations"):
         columns = st.columns(len(recommendations))
         for column, recommendation in zip(columns, recommendations):
             with column:
+                st.markdown(
+                    '<div class="recommendation-title">'
+                    f'{html.escape(recommendation["song"])}'
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
                 st.image(
                     recommendation["cover_result"][0],
                     use_container_width=True,
                 )
-                st.write(recommendation["song"])
-                st.caption(recommendation["artist"])

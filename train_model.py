@@ -1,4 +1,5 @@
 import argparse
+import json
 import pickle
 from pathlib import Path
 
@@ -28,8 +29,39 @@ def build_model(csv_path):
         pickle.dump(music, file)
     with (PROJECT_DIR / "similarity.pkl").open("wb") as file:
         pickle.dump(similarity, file)
+    build_recommendation_catalog(music, similarity)
 
     return len(music)
+
+
+def build_recommendation_catalog(music, similarity, limit=5):
+    songs = []
+    for index, row in music.iterrows():
+        ranked_indices = similarity[index].argsort()[::-1]
+        recommendations = []
+        for recommendation_index in ranked_indices:
+            if recommendation_index == index:
+                continue
+            recommendation = music.iloc[recommendation_index]
+            recommendations.append(
+                {
+                    "song": str(recommendation["song"]),
+                    "artist": str(recommendation["artist"]),
+                }
+            )
+            if len(recommendations) == limit:
+                break
+        songs.append(
+            {
+                "song": str(row["song"]),
+                "artist": str(row["artist"]),
+                "recommendations": recommendations,
+            }
+        )
+
+    catalog_path = PROJECT_DIR / "recommendations.json"
+    with catalog_path.open("w", encoding="utf-8") as file:
+        json.dump({"songs": songs}, file, ensure_ascii=False, separators=(",", ":"))
 
 
 def prepare_model(music):
@@ -71,7 +103,7 @@ def main():
 
     print(
         f"Created df.pkl and similarity.pkl using {song_count} songs "
-        f"in {PROJECT_DIR}."
+        f"in {PROJECT_DIR}, plus recommendations.json."
     )
 
 

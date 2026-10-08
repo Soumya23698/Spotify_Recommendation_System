@@ -8,3 +8,5 @@ __pycache__/
 *.pkl
 spotify_millsongdata.csv
 .streamlit/
+!.streamlit/
+!.streamlit/config.toml
