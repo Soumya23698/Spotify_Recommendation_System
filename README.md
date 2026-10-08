@@ -34,15 +34,14 @@
 ## Deploy on Streamlit Community Cloud
 
 The lyrics dataset and generated model files are intentionally not committed to
-GitHub. When the deployed app has no local model, upload a CSV in the app with
-`artist`, `song`, and `text` columns. It builds and caches the recommendation
-vectors for the session; only the selected song's similarity scores are
-calculated, avoiding a large dense model file.
+GitHub. The app does not provide a dataset upload control. A deployment must
+have `df.pkl` and `similarity.pkl` available next to `app.py` or it will show a
+model-not-configured message.
 
 To deploy, sign in at <https://share.streamlit.io>, select **Create app**, choose
 `Soumya23698/Spotify_Recommendation_System`, branch `main`, and file path
-`app.py`, then deploy. On first use, upload a copy of the dataset you are
-permitted to use.
+`app.py`, then deploy. Configure the trained model files for the deployment
+before expecting song recommendations.
 
 ## VS Code imports
 
