@@ -142,8 +142,12 @@ def recommend(song, music, similarity, spotify_client, song_vectors=None):
     return recommendations
 
 
-st.set_page_config(page_title="Music Recommender", page_icon="🎵", layout="wide")
-st.title("Music Recommender System")
+st.set_page_config(
+    page_title="Spotify Song Recommender",
+    page_icon="🎵",
+    layout="wide",
+)
+st.title("Spotify Song Recommender")
 
 try:
     music, similarity = load_models()
